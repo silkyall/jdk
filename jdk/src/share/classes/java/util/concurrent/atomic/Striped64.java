@@ -34,6 +34,8 @@
  */
 
 package java.util.concurrent.atomic;
+import sun.plugin2.gluegen.runtime.CPU;
+
 import java.util.function.LongBinaryOperator;
 import java.util.function.DoubleBinaryOperator;
 import java.util.concurrent.ThreadLocalRandom;
@@ -140,6 +142,7 @@ abstract class Striped64 extends Number {
     }
 
     /** Number of CPUS, to place bound on table size */
+    // 决定cells数组大小
     static final int NCPU = Runtime.getRuntime().availableProcessors();
 
     /**
@@ -151,11 +154,15 @@ abstract class Striped64 extends Number {
      * Base value, used mainly when there is no contention, but also as
      * a fallback during table initialization races. Updated via CAS.
      */
+    // 两种情况下使用
+    // 1. 没有并发竞争，直接使用 base 累加
+    // 2. 只能有一个线程对 cells 初始化，其他竞争失败线程累加到 base 上
     transient volatile long base;
 
     /**
      * Spinlock (locked via CAS) used when resizing and/or creating Cells.
      */
+    // cells 初始化或扩容时，加锁状态为 1
     transient volatile int cellsBusy;
 
     /**
@@ -213,16 +220,19 @@ abstract class Striped64 extends Number {
      */
     final void longAccumulate(long x, LongBinaryOperator fn,
                               boolean wasUncontended) {
-        int h;
+        int h;  //生成非 0 的 hash 值
         if ((h = getProbe()) == 0) {
             ThreadLocalRandom.current(); // force initialization
             h = getProbe();
             wasUncontended = true;
         }
+        // 扩容意向，hash 取模得到的 cell 单元不为 null，则为 true
         boolean collide = false;                // True if last slot nonempty
         for (;;) {
             Cell[] as; Cell a; int n; long v;
+            // CASE1：cells 已经被初始化
             if ((as = cells) != null && (n = as.length) > 0) {
+                // cell 单元未被使用
                 if ((a = as[(n - 1) & h]) == null) {
                     if (cellsBusy == 0) {       // Try to attach new Cell
                         Cell r = new Cell(x);   // Optimistically create
@@ -246,15 +256,19 @@ abstract class Striped64 extends Number {
                     }
                     collide = false;
                 }
+                // 前一次 CAS 更新 cell 单元是否成功
                 else if (!wasUncontended)       // CAS already known to fail
                     wasUncontended = true;      // Continue after rehash
+                // 尝试 CAS 更新 cell 单元值
                 else if (a.cas(v = a.value, ((fn == null) ? v + x :
                                              fn.applyAsLong(v, x))))
                     break;
+                // cells 数组大小超过 CPU 核数，不再扩容
                 else if (n >= NCPU || cells != as)
                     collide = false;            // At max size or stale
                 else if (!collide)
                     collide = true;
+                // 尝试加锁扩容
                 else if (cellsBusy == 0 && casCellsBusy()) {
                     try {
                         if (cells == as) {      // Expand table unless stale
@@ -269,14 +283,16 @@ abstract class Striped64 extends Number {
                     collide = false;
                     continue;                   // Retry with expanded table
                 }
-                h = advanceProbe(h);
+                h = advanceProbe(h); //重新计算 hash 值
             }
+            // CASE2：cells 没有加锁，且没有初始化
+            // casCellsBusy 置为加锁态
             else if (cellsBusy == 0 && cells == as && casCellsBusy()) {
                 boolean init = false;
                 try {                           // Initialize table
                     if (cells == as) {
-                        Cell[] rs = new Cell[2];
-                        rs[h & 1] = new Cell(x);
+                        Cell[] rs = new Cell[2];    //初始化大小为 2
+                        rs[h & 1] = new Cell(x);    //在 0，1 位置上随机附上值
                         cells = rs;
                         init = true;
                     }
@@ -286,6 +302,7 @@ abstract class Striped64 extends Number {
                 if (init)
                     break;
             }
+            // CASE3：cells 正在进行初始化，直接在 base 进行累加
             else if (casBase(v = base, ((fn == null) ? v + x :
                                         fn.applyAsLong(v, x))))
                 break;                          // Fall back on using base

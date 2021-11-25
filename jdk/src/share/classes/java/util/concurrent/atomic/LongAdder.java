@@ -83,6 +83,8 @@ public class LongAdder extends Striped64 implements Serializable {
      */
     public void add(long x) {
         Cell[] as; long b, v; int m; Cell a;
+        // 无并发时，CAS 操作 base
+        // 多线程线性执行，则都累加到 base 中
         if ((as = cells) != null || !casBase(b = base, b + x)) {
             boolean uncontended = true;
             if (as == null || (m = as.length - 1) < 0 ||
