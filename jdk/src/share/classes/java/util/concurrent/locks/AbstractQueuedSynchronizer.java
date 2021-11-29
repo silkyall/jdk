@@ -602,17 +602,20 @@ public abstract class AbstractQueuedSynchronizer
      * @param mode Node.EXCLUSIVE for exclusive, Node.SHARED for shared
      * @return the new node
      */
+    // 为当前线程生成一个 Node，并放入链表尾部，并未阻塞
     private Node addWaiter(Node mode) {
         Node node = new Node(Thread.currentThread(), mode);
         // Try the fast path of enq; backup to full enq on failure
         Node pred = tail;
         if (pred != null) {
             node.prev = pred;
+            // 首先尝试添加到尾部，不成功则执行一下 enq
             if (compareAndSetTail(pred, node)) {
                 pred.next = node;
                 return node;
             }
         }
+        // 不断自旋，直至成功加入尾部
         enq(node);
         return node;
     }
@@ -852,6 +855,7 @@ public abstract class AbstractQueuedSynchronizer
      * @param arg the acquire argument
      * @return {@code true} if interrupted while waiting
      */
+    // 进入方法则无限期阻塞，
     final boolean acquireQueued(final Node node, int arg) {
         boolean failed = true;
         try {
