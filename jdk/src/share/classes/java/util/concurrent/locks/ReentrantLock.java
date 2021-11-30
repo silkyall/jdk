@@ -126,6 +126,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
          * Performs non-fair tryLock.  tryAcquire is implemented in
          * subclasses, but both need nonfair try for trylock method.
          */
+        // 由于 ReentrantLock.tryLock()使用 nonfair 策略，因此代码块置于此处
         final boolean nonfairTryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
             int c = getState();
@@ -136,7 +137,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
                     return true;
                 }
             }
-            // 重入，累加 state 值
+            // 可重入，直接累加 state 值（当前只有单个线程，无需 CAS）
             else if (current == getExclusiveOwnerThread()) {
                 int nextc = c + acquires;
                 // 可重入最大次数，int
@@ -150,13 +151,16 @@ public class ReentrantLock implements Lock, java.io.Serializable {
 
         protected final boolean tryRelease(int releases) {
             int c = getState() - releases;
+            // 只有锁拥有者，才能释放锁
             if (Thread.currentThread() != getExclusiveOwnerThread())
                 throw new IllegalMonitorStateException();
             boolean free = false;
+            // 锁完全被释放
             if (c == 0) {
                 free = true;
                 setExclusiveOwnerThread(null);
             }
+            // 因为互斥锁，所以直接赋值，无需 CAS
             setState(c);
             return free;
         }
@@ -233,6 +237,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
          * Fair version of tryAcquire.  Don't grant access unless
          * recursive call or no waiters or is first.
          */
+        // 相对于公平锁，只是少了“队列中是否有其它线程排在当前线程前”这一判断
         protected final boolean tryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
             int c = getState();
@@ -460,6 +465,7 @@ public class ReentrantLock implements Lock, java.io.Serializable {
      * @throws IllegalMonitorStateException if the current thread does not
      *         hold this lock
      */
+    // 不区分公不公平
     public void unlock() {
         sync.release(1);
     }
