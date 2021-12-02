@@ -34,15 +34,16 @@
  */
 
 package java.util.concurrent;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
+
+import java.lang.ref.WeakReference;
 import java.util.AbstractQueue;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.lang.ref.WeakReference;
-import java.util.Spliterators;
 import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A bounded {@linkplain BlockingQueue blocking queue} backed by an
@@ -253,6 +254,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
         if (capacity <= 0)
             throw new IllegalArgumentException();
         this.items = new Object[capacity];
+        // 一把锁两个条件
         lock = new ReentrantLock(fair);
         notEmpty = lock.newCondition();
         notFull =  lock.newCondition();
@@ -350,6 +352,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
         lock.lockInterruptibly();
         try {
             while (count == items.length)
+                // 队列满，则阻塞
                 notFull.await();
             enqueue(e);
         } finally {

@@ -34,11 +34,13 @@
  */
 
 package java.util.concurrent.locks;
-import java.util.concurrent.TimeUnit;
+
+import sun.misc.Unsafe;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
-import sun.misc.Unsafe;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Provides a framework for implementing blocking locks and related
@@ -1708,6 +1710,7 @@ public abstract class AbstractQueuedSynchronizer
          * attempt to set waitStatus fails, wake up to resync (in which
          * case the waitStatus can be transiently and harmlessly wrong).
          */
+        // 放入互斥锁同步队列中，说明 await 中线程是被 unpark 唤醒，而不是中断唤醒
         Node p = enq(node);
         int ws = p.waitStatus;
         if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
@@ -1857,6 +1860,7 @@ public abstract class AbstractQueuedSynchronizer
      */
     public class ConditionObject implements Condition, java.io.Serializable {
         private static final long serialVersionUID = 1173984872572414699L;
+        // 每个 Condition 上都阻塞多个线程，因此有个双向链表
         /** First node of condition queue. */
         private transient Node firstWaiter;
         /** Last node of condition queue. */
@@ -1873,6 +1877,7 @@ public abstract class AbstractQueuedSynchronizer
          * Adds a new waiter to wait queue.
          * @return its new wait node
          */
+        // 执行前已拿到锁，因此天生线程安全
         private Node addConditionWaiter() {
             Node t = lastWaiter;
             // If lastWaiter is cancelled, clean out.
@@ -1895,6 +1900,7 @@ public abstract class AbstractQueuedSynchronizer
          * to inline the case of no waiters.
          * @param first (non-null) the first node on condition queue
          */
+        // 唤醒队列中第一个线程
         private void doSignal(Node first) {
             do {
                 if ( (firstWaiter = first.nextWaiter) == null)
@@ -1963,6 +1969,7 @@ public abstract class AbstractQueuedSynchronizer
          *         returns {@code false}
          */
         public final void signal() {
+            // 只有持有锁的线程
             if (!isHeldExclusively())
                 throw new IllegalMonitorStateException();
             Node first = firstWaiter;
@@ -2060,14 +2067,19 @@ public abstract class AbstractQueuedSynchronizer
         public final void await() throws InterruptedException {
             if (Thread.interrupted())
                 throw new InterruptedException();
+            // 加入 Condition 等待队列
             Node node = addConditionWaiter();
+            // 阻塞之前，必须先释放锁，否则死锁（与 wait 类似）
             int savedState = fullyRelease(node);
             int interruptMode = 0;
             while (!isOnSyncQueue(node)) {
+                // 自己阻塞自己
                 LockSupport.park(this);
+                // 在 park 期间是否收到中断信号
                 if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
                     break;
             }
+            // 重新拿锁
             if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
                 interruptMode = REINTERRUPT;
             if (node.nextWaiter != null) // clean up if cancelled

@@ -353,5 +353,6 @@ public interface Lock {
      * @throws UnsupportedOperationException if this {@code Lock}
      *         implementation does not support conditions
      */
+    // 所有的 Condition 都是从该处构造出去
     Condition newCondition();
 }

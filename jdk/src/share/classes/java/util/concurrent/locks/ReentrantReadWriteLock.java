@@ -34,8 +34,9 @@
  */
 
 package java.util.concurrent.locks;
-import java.util.concurrent.TimeUnit;
+
 import java.util.Collection;
+import java.util.concurrent.TimeUnit;
 
 /**
  * An implementation of {@link ReadWriteLock} supporting similar
@@ -259,7 +260,8 @@ public class ReentrantReadWriteLock
          * The lower one representing the exclusive (writer) lock hold count,
          * and the upper the shared (reader) hold count.
          */
-
+        // 将 state 拆成两部分，高读低写 16
+        // 无法用一次 CAS 同时操作两个 int 变量，所以对半拆分
         static final int SHARED_SHIFT   = 16;
         static final int SHARED_UNIT    = (1 << SHARED_SHIFT);
         static final int MAX_COUNT      = (1 << SHARED_SHIFT) - 1;
@@ -374,7 +376,7 @@ public class ReentrantReadWriteLock
             boolean free = exclusiveCount(nextc) == 0;
             if (free)
                 setExclusiveOwnerThread(null);
-            setState(nextc);
+            setState(nextc);    //写锁排他，直接操作
             return free;
         }
 
@@ -395,14 +397,17 @@ public class ReentrantReadWriteLock
             int w = exclusiveCount(c);
             if (c != 0) {
                 // (Note: if c != 0 and w == 0 then shared count != 0)
+                // 被读线程持有直接返回，或写线程不是自己
                 if (w == 0 || current != getExclusiveOwnerThread())
                     return false;
+                // 16 位用满，超过最大重入次数
                 if (w + exclusiveCount(acquires) > MAX_COUNT)
                     throw new Error("Maximum lock count exceeded");
                 // Reentrant acquire
                 setState(c + acquires);
                 return true;
             }
+            // 当前无锁，则按策略 CAS
             if (writerShouldBlock() ||
                 !compareAndSetState(c, c + acquires))
                 return false;
@@ -430,6 +435,7 @@ public class ReentrantReadWriteLock
                 }
                 --rh.count;
             }
+            // 读锁是共享锁，释放需要 CAS 重试
             for (;;) {
                 int c = getState();
                 int nextc = c - SHARED_UNIT;
@@ -464,6 +470,8 @@ public class ReentrantReadWriteLock
              */
             Thread current = Thread.currentThread();
             int c = getState();
+            // 写锁被某线程持有，且非自我线程，直接返回
+            // Note:写线程，可以再次获取读锁
             if (exclusiveCount(c) != 0 &&
                 getExclusiveOwnerThread() != current)
                 return -1;
@@ -471,6 +479,7 @@ public class ReentrantReadWriteLock
             if (!readerShouldBlock() &&
                 r < MAX_COUNT &&
                 compareAndSetState(c, c + SHARED_UNIT)) {
+                // 第一个拿到该锁的线程
                 if (r == 0) {
                     firstReader = current;
                     firstReaderHoldCount = 1;
@@ -486,6 +495,7 @@ public class ReentrantReadWriteLock
                 }
                 return 1;
             }
+            // 拿锁失败，不断自旋
             return fullTryAcquireShared(current);
         }
 
@@ -669,6 +679,7 @@ public class ReentrantReadWriteLock
      */
     static final class NonfairSync extends Sync {
         private static final long serialVersionUID = -8159625535654395037L;
+        // 写线程在抢锁之前，不阻塞
         final boolean writerShouldBlock() {
             return false; // writers can always barge
         }
@@ -680,6 +691,7 @@ public class ReentrantReadWriteLock
              * block if there is a waiting writer behind other enabled
              * readers that have not yet drained from the queue.
              */
+            // 当队列中首节点为写线程，需阻塞
             return apparentlyFirstQueuedIsExclusive();
         }
     }
@@ -690,6 +702,7 @@ public class ReentrantReadWriteLock
     static final class FairSync extends Sync {
         private static final long serialVersionUID = -2274990926593161451L;
         final boolean writerShouldBlock() {
+            // 队列中有其他线程排队，需要阻塞
             return hasQueuedPredecessors();
         }
         final boolean readerShouldBlock() {
@@ -888,6 +901,7 @@ public class ReentrantReadWriteLock
          *
          * @throws UnsupportedOperationException always
          */
+        // 读锁不支持 Condition
         public Condition newCondition() {
             throw new UnsupportedOperationException();
         }
