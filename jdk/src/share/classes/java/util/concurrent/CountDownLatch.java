@@ -169,6 +169,7 @@ public class CountDownLatch {
             return getState();
         }
 
+        // state != 0，放入 AQS 阻塞队列，进入阻塞状态
         protected int tryAcquireShared(int acquires) {
             return (getState() == 0) ? 1 : -1;
         }
@@ -177,7 +178,7 @@ public class CountDownLatch {
             // Decrement count; signal when transition to zero
             for (;;) {
                 int c = getState();
-                if (c == 0)
+                if (c == 0)  //此处作用为何
                     return false;
                 int nextc = c-1;
                 if (compareAndSetState(c, nextc))

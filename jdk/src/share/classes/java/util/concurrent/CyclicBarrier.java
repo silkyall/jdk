@@ -148,6 +148,7 @@ public class CyclicBarrier {
      * There need not be an active generation if there has been a break
      * but no subsequent reset.
      */
+    // 每一轮集齐后，称为一个 Generation
     private static class Generation {
         boolean broken = false;
     }
@@ -155,8 +156,10 @@ public class CyclicBarrier {
     /** The lock for guarding barrier entry */
     private final ReentrantLock lock = new ReentrantLock();
     /** Condition to wait on until tripped */
+    // 用于线程间相互唤醒
     private final Condition trip = lock.newCondition();
     /** The number of parties */
+    // 总线程数
     private final int parties;
     /* The command to run when tripped */
     private final Runnable barrierCommand;
@@ -205,20 +208,23 @@ public class CyclicBarrier {
 
             if (g.broken)
                 throw new BrokenBarrierException();
-
+            // 响应中断，唤醒所有阻塞线程
             if (Thread.interrupted()) {
                 breakBarrier();
                 throw new InterruptedException();
             }
 
             int index = --count;
+            // =0 时，唤醒其他所有线程
             if (index == 0) {  // tripped
                 boolean ranAction = false;
                 try {
                     final Runnable command = barrierCommand;
                     if (command != null)
+                        // 一起唤醒前，执行回调
                         command.run();
                     ranAction = true;
+                    // 唤醒所有线程，并重置count
                     nextGeneration();
                     return 0;
                 } finally {
@@ -227,10 +233,12 @@ public class CyclicBarrier {
                 }
             }
 
+            // count> 0，阻塞自己
             // loop until tripped, broken, interrupted, or timed out
             for (;;) {
                 try {
                     if (!timed)
+                        // 阻塞自己同时，释放锁
                         trip.await();
                     else if (nanos > 0L)
                         nanos = trip.awaitNanos(nanos);
@@ -274,6 +282,7 @@ public class CyclicBarrier {
      *        tripped, or {@code null} if there is no action
      * @throws IllegalArgumentException if {@code parties} is less than 1
      */
+    // 还能传入回调函数，所有线程被唤醒时触发
     public CyclicBarrier(int parties, Runnable barrierAction) {
         if (parties <= 0) throw new IllegalArgumentException();
         this.parties = parties;

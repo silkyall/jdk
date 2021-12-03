@@ -679,6 +679,7 @@ public abstract class AbstractQueuedSynchronizer
      * propagation. (Note: For exclusive mode, release just amounts
      * to calling unparkSuccessor of head if it needs signal.)
      */
+    // 唤醒队列所有阻塞线程
     private void doReleaseShared() {
         /*
          * Ensure that a release propagates, even if there are other
@@ -1330,6 +1331,7 @@ public abstract class AbstractQueuedSynchronizer
             throws InterruptedException {
         if (Thread.interrupted())
             throw new InterruptedException();
+
         if (tryAcquireShared(arg) < 0)
             doAcquireSharedInterruptibly(arg);
     }
@@ -2072,6 +2074,7 @@ public abstract class AbstractQueuedSynchronizer
             // 阻塞之前，必须先释放锁，否则死锁（与 wait 类似）
             int savedState = fullyRelease(node);
             int interruptMode = 0;
+            // 当 signal 时，先加入 AQS 队列中，为了判断此处是 unpark 唤醒，还是中断唤醒
             while (!isOnSyncQueue(node)) {
                 // 自己阻塞自己
                 LockSupport.park(this);
